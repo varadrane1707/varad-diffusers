@@ -700,7 +700,7 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
         self._current_timestep = None
         
-        del latent_model_input, timestep, noise_pred, noise_uncond, callback_outputs, callback_kwargs
+        del latent_model_input, timestep, noise_pred, noise_uncond, prompt_embeds, negative_prompt_embeds
         torch.cuda.empty_cache()
         gc.collect()
 
