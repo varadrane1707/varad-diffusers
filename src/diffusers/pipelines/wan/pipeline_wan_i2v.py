@@ -40,8 +40,8 @@ if is_torch_xla_available():
 else:
     XLA_AVAILABLE = False
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 if is_ftfy_available():
     import ftfy
@@ -582,9 +582,9 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         )
 
         if num_frames % self.vae_scale_factor_temporal != 1:
-            logger.warning(
-                f"`num_frames - 1` has to be divisible by {self.vae_scale_factor_temporal}. Rounding to the nearest number."
-            )
+            # logger.warning(
+            #     f"`num_frames - 1` has to be divisible by {self.vae_scale_factor_temporal}. Rounding to the nearest number."
+            # )
             num_frames = num_frames // self.vae_scale_factor_temporal * self.vae_scale_factor_temporal + 1
         num_frames = max(num_frames, 1)
 

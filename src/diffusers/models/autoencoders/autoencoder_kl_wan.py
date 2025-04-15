@@ -27,7 +27,7 @@ from ..activations import get_activation
 from ..modeling_outputs import AutoencoderKLOutput
 from ..modeling_utils import ModelMixin
 from .vae import DecoderOutput, DiagonalGaussianDistribution
-
+import GPUtil
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -618,6 +618,14 @@ class WanDecoder3d(nn.Module):
 
         self.gradient_checkpointing = False
         
+    def max_memory_usage(self):
+       return GPUtil.getGPUs()[0].memoryTotal
+
+    def get_gpu_memory_usage(self):
+        """Get current GPU memory usage in MB"""
+        gpu = GPUtil.getGPUs()[0]
+        return gpu.memoryUsed
+        
     def log_gpu_memory_usage(self, message=""):
         """Log current GPU memory usage"""
         memory_used = self.get_gpu_memory_usage()
@@ -627,7 +635,7 @@ class WanDecoder3d(nn.Module):
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         ## conv1
-        self.log_gpu_memory_usage("conv1 input block")
+        # self.log_gpu_memory_usage("conv1 input block")
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -641,23 +649,25 @@ class WanDecoder3d(nn.Module):
             x = self.conv_in(x)
 
         ## middle
-        self.log_gpu_memory_usage("mid_block input block")
+        # self.log_gpu_memory_usage("mid_block input block")
         x = self.mid_block(x, feat_cache, feat_idx)
-        self.log_gpu_memory_usage("mid_block output block")
+        # self.log_gpu_memory_usage("mid_block output block")
 
         ## upsamples
         for up_block in self.up_blocks:
-            self.log_gpu_memory_usage("up_block input block")
+            # self.log_gpu_memory_usage("up_block input block")
             x = up_block(x, feat_cache, feat_idx)
-            self.log_gpu_memory_usage("up_block output block")
-
+            torch.cuda.empty_cache()
+            # self.log_gpu_memory_usage("up_block output block")
+        # print("UPSAMPLE DONE")
+        torch.cuda.empty_cache()
         ## head
-        self.log_gpu_memory_usage("norm_out input block")
+        # self.log_gpu_memory_usage("norm_out input block")
         x = self.norm_out(x)
-        self.log_gpu_memory_usage("norm_out output block")
-        self.log_gpu_memory_usage("nonlinearity input block")
+        # self.log_gpu_memory_usage("norm_out output block")
+        # self.log_gpu_memory_usage("nonlinearity input block")
         x = self.nonlinearity(x)
-        self.log_gpu_memory_usage("nonlinearity output block")
+        # self.log_gpu_memory_usage("nonlinearity output block")
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -669,7 +679,7 @@ class WanDecoder3d(nn.Module):
             feat_idx[0] += 1
         else:
             x = self.conv_out(x)
-        self.log_gpu_memory_usage("conv_out output block")
+        # self.log_gpu_memory_usage("conv_out output block")
         return x
 
 
@@ -813,6 +823,7 @@ class AutoencoderKLWan(ModelMixin, ConfigMixin, FromOriginalModelMixin):
 
         iter_ = z.shape[2]
         x = self.post_quant_conv(z)
+        print(f"Decoding {iter_} Tensor Latents")
         for i in range(iter_):
             self._conv_idx = [0]
             if i == 0:
