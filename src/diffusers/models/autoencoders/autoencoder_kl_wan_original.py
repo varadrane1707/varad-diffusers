@@ -617,17 +617,9 @@ class WanDecoder3d(nn.Module):
         self.conv_out = WanCausalConv3d(out_dim, 3, 3, padding=1)
 
         self.gradient_checkpointing = False
-        
-    def log_gpu_memory_usage(self, message=""):
-        """Log current GPU memory usage"""
-        memory_used = self.get_gpu_memory_usage()
-        memory_total = self.max_memory_usage()
-        memory_percent = (memory_used / memory_total) * 100
-        print(f"GPU Memory Usage {message}: {memory_used:.2f}MB / {memory_total:.2f}MB ({memory_percent:.2f}%)")
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         ## conv1
-        self.log_gpu_memory_usage("conv1 input block")
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -641,23 +633,15 @@ class WanDecoder3d(nn.Module):
             x = self.conv_in(x)
 
         ## middle
-        self.log_gpu_memory_usage("mid_block input block")
         x = self.mid_block(x, feat_cache, feat_idx)
-        self.log_gpu_memory_usage("mid_block output block")
 
         ## upsamples
         for up_block in self.up_blocks:
-            self.log_gpu_memory_usage("up_block input block")
             x = up_block(x, feat_cache, feat_idx)
-            self.log_gpu_memory_usage("up_block output block")
 
         ## head
-        self.log_gpu_memory_usage("norm_out input block")
         x = self.norm_out(x)
-        self.log_gpu_memory_usage("norm_out output block")
-        self.log_gpu_memory_usage("nonlinearity input block")
         x = self.nonlinearity(x)
-        self.log_gpu_memory_usage("nonlinearity output block")
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -669,7 +653,6 @@ class WanDecoder3d(nn.Module):
             feat_idx[0] += 1
         else:
             x = self.conv_out(x)
-        self.log_gpu_memory_usage("conv_out output block")
         return x
 
 
@@ -817,11 +800,10 @@ class AutoencoderKLWan(ModelMixin, ConfigMixin, FromOriginalModelMixin):
             self._conv_idx = [0]
             if i == 0:
                 out = self.decoder(x[:, :, i : i + 1, :, :], feat_cache=self._feat_map, feat_idx=self._conv_idx)
-                self.clear_cache()
             else:
                 out_ = self.decoder(x[:, :, i : i + 1, :, :], feat_cache=self._feat_map, feat_idx=self._conv_idx)
                 out = torch.cat([out, out_], 2)
-                self.clear_cache()
+
         out = torch.clamp(out, min=-1.0, max=1.0)
         self.clear_cache()
         if not return_dict:

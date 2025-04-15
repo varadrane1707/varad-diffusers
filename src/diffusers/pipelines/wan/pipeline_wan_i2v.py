@@ -40,6 +40,7 @@ if is_torch_xla_available():
 else:
     XLA_AVAILABLE = False
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 if is_ftfy_available():
@@ -719,11 +720,10 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
             video = self.video_processor.postprocess_video(video, output_type=output_type)
         else:
             video = latents
-
+            
         # Offload all models
         self.maybe_free_model_hooks()
 
         if not return_dict:
             return (video,)
-
-        return WanPipelineOutput(frames=video)
+        return WanPipelineOutput(frames=video)    
