@@ -15,6 +15,7 @@
 import html
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import gc
+import time
 
 import PIL
 import regex as re
@@ -182,7 +183,7 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         self.vae_scale_factor_spatial = 2 ** len(self.vae.temperal_downsample) if getattr(self, "vae", None) else 8
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
         self.image_processor = image_processor
-
+        
     def _get_t5_prompt_embeds(
         self,
         prompt: Union[str, List[str]] = None,
@@ -191,6 +192,7 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
+        start_time = time.time()
         device = device or self._execution_device
         dtype = dtype or self.text_encoder.dtype
 
@@ -221,7 +223,8 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         _, seq_len, _ = prompt_embeds.shape
         prompt_embeds = prompt_embeds.repeat(1, num_videos_per_prompt, 1)
         prompt_embeds = prompt_embeds.view(batch_size * num_videos_per_prompt, seq_len, -1)
-
+        end_time = time.time()
+        print(f"Time taken for T5 prompt embeds: {end_time - start_time} seconds")
         return prompt_embeds
 
     def encode_image(
@@ -229,9 +232,12 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         image: PipelineImageInput,
         device: Optional[torch.device] = None,
     ):
+        start_time = time.time()
         device = device or self._execution_device
         image = self.image_processor(images=image, return_tensors="pt").to(device)
         image_embeds = self.image_encoder(**image, output_hidden_states=True)
+        end_time = time.time()
+        print(f"Time taken for image encoder: {end_time - start_time} seconds")
         return image_embeds.hidden_states[-2]
 
     # Copied from diffusers.pipelines.wan.pipeline_wan.WanPipeline.encode_prompt
@@ -383,6 +389,7 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        start_time = time.time()
         num_latent_frames = (num_frames - 1) // self.vae_scale_factor_temporal + 1
         latent_height = height // self.vae_scale_factor_spatial
         latent_width = width // self.vae_scale_factor_spatial
@@ -433,7 +440,8 @@ class WanImageToVideoPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         mask_lat_size = mask_lat_size.view(batch_size, -1, self.vae_scale_factor_temporal, latent_height, latent_width)
         mask_lat_size = mask_lat_size.transpose(1, 2)
         mask_lat_size = mask_lat_size.to(latent_condition.device)
-
+        end_time = time.time()
+        print(f"Time taken for prepare latents: {end_time - start_time} seconds")
         return latents, torch.concat([mask_lat_size, latent_condition], dim=1)
 
     @property

@@ -14,6 +14,7 @@
 
 import math
 from typing import Any, Dict, Optional, Tuple, Union
+import time
 
 import torch
 import torch.nn as nn
@@ -357,6 +358,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
         out_channels = out_channels or in_channels
 
         # 1. Patch & position embedding
+        start_time = time.time()
         self.rope = WanRotaryPosEmbed(attention_head_dim, patch_size, rope_max_seq_len)
         self.patch_embedding = nn.Conv3d(in_channels, inner_dim, kernel_size=patch_size, stride=patch_size)
 
@@ -416,21 +418,31 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
         post_patch_num_frames = num_frames // p_t
         post_patch_height = height // p_h
         post_patch_width = width // p_w
-
+        start_time = time.time()
         rotary_emb = self.rope(hidden_states)
+        end_time = time.time()
+        print(f"Time taken for WanRotaryPosEmbed: {end_time - start_time} seconds")
 
+        start_time = time.time()
         hidden_states = self.patch_embedding(hidden_states)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        end_time = time.time()
+        print(f"Time taken for patch embedding: {end_time - start_time} seconds")
 
+        start_time = time.time()
         temb, timestep_proj, encoder_hidden_states, encoder_hidden_states_image = self.condition_embedder(
             timestep, encoder_hidden_states, encoder_hidden_states_image
         )
         timestep_proj = timestep_proj.unflatten(1, (6, -1))
+        end_time = time.time()
+        print(f"Time taken for WanTimeTextImageEmbedding: {end_time - start_time} seconds")
 
+        start_time = time.time()
         if encoder_hidden_states_image is not None:
             encoder_hidden_states = torch.concat([encoder_hidden_states_image, encoder_hidden_states], dim=1)
 
         # 4. Transformer blocks
+        start_time = time.time()
         if torch.is_grad_enabled() and self.gradient_checkpointing:
             for block in self.blocks:
                 hidden_states = self._gradient_checkpointing_func(
@@ -439,7 +451,10 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
         else:
             for block in self.blocks:
                 hidden_states = block(hidden_states, encoder_hidden_states, timestep_proj, rotary_emb)
+        end_time = time.time()
+        print(f"Time taken for WanTransformerBlock: {end_time - start_time} seconds")
 
+        start_time = time.time()
         # 5. Output norm, projection & unpatchify
         shift, scale = (self.scale_shift_table + temb.unsqueeze(1)).chunk(2, dim=1)
 
@@ -458,6 +473,8 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOrigi
         )
         hidden_states = hidden_states.permute(0, 7, 1, 4, 2, 5, 3, 6)
         output = hidden_states.flatten(6, 7).flatten(4, 5).flatten(2, 3)
+        end_time = time.time()
+        print(f"Time taken for Normalization and Projection: {end_time - start_time} seconds")
 
         if USE_PEFT_BACKEND:
             # remove `lora_scale` from each PEFT layer
